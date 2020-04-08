@@ -36,35 +36,38 @@ def update_device_list() -> list:
             # AirPods (Tested with gen 1 AirPods)
             if params_present(this_device, ('BatteryPercentCase', 'BatteryPercentLeft', 'BatteryPercentRight')):
                 devices.append(AirPods(this_device))
-            # Unknown devices get a generic Device that's just their address and name.
+            # Unknown devices get a generic Device that's just their address, name, and the full output from the plist.
             else:
                 devices.append(Device(this_device))
     return devices
 
+def write_log(device, log_file: str) -> None:
+    keys = sorted(device.levels().keys())
+    header = ['elapsed']
+    header += keys
+    row = [time.perf_counter()]
+    for key in keys:
+        row.append(device.levels()[key])
+    if not os.path.exists(log_file):
+        with open(log_file, 'w', encoding='utf-8') as fd:
+            csv.writer(fd, quoting=csv.QUOTE_ALL).writerow(header)
+    with open(log_file, 'a', encoding='utf-8') as fd:
+        csv.writer(fd, quoting=csv.QUOTE_ALL).writerow(row)
+
 if __name__ == '__main__':
-    args = setup()
+    args = setup() 
+    start_timestamp = time.strftime('%Y-%m-%d_%H-%M-%S')
     if not args.addr:
         for device in sorted(update_device_list(), key=lambda x: x.name):
             print(f"{device.addr}: {device.name}")
     else:
-        log_file = f"{args.addr}.csv"#_{time.strftime('%Y%m%d%H%M%S')}.csv"
         while True:
             try:
                 for device in update_device_list():
                     if device.addr == args.addr:
-                        if not os.path.exists(log_file):
-                            header = ['timestamp']
-                            header += device.attrib_keys()
-                            print(header)
-                            with open(log_file, 'w', encoding='utf-8') as fd:
-                                csv.writer(fd, quoting=csv.QUOTE_ALL).writerow(header)
-                        row = [time.perf_counter()]
-                        row += device.levels().values()
-                        print(device.levels())
-                        print(device.levels().values())
-                        print(row)
-                        with open(log_file, 'a', encoding='utf-8') as fd:
-                            csv.writer(fd, quoting=csv.QUOTE_ALL).writerow(row)
+                        status_msg = ', '.join([f"{k}: {v}" for k, v in device.levels().items()])
+                        print(f"{device.name} ({device.addr}): {status_msg}")
+                        write_log(device, f"{args.addr}__{start_timestamp}.csv")
                 time.sleep(args.interval)
             except KeyboardInterrupt:
                 break
